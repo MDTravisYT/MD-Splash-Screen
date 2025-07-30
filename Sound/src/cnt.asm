@@ -738,12 +738,12 @@ buf_end:
 		bls		songscan				; then song
 		cmpi.b	#sestrt,d7				; if no. < sestrt
 		bcs		.end					; then end
-		cmpi.b	#seend,d7				; if no. <= seend
-		bls		sescan					; then seend
-		cmpi.b	#bkstrt,d7				; if no. < backse start
-		bcs		.end					; then end
-		cmpi.b	#vostrt,d7				; if no. < vostrt
-		bcs		backscan				; then back s.e
+	;	cmpi.b	#seend,d7				; if no. <= seend
+	;	bls		sescan					; then seend
+	;	cmpi.b	#bkstrt,d7				; if no. < backse start
+	;	bcs		.end					; then end
+	;	cmpi.b	#vostrt,d7				; if no. < vostrt
+	;	bcs		backscan				; then back s.e
 		cmpi.b	#utlst,d7				; if no. < utlst
 		bcs.s	z80_voice_set			; then z80 voice set
 		cmpi.b	#lstno,d7				; if no. < lstno
@@ -948,92 +948,6 @@ fm_chan_tb:
 psg_chan_tb:
 		dc.b	$80,$a0,$c0				; PSG channel data
 
-;=======================================;
-;										;
-;				 SE SCAN				;
-;										;
-;=======================================;
-; in d7 = key no.
-;		public	sescan
-sescan:
-		lea	setb(pc),a3	; a3 = setb address
-		subi.b	#sestrt,d7				; d7 = key no. - se start no.
-		lsl.w	#2,d7					; *4 (for long word)
-		adda.l	(a3,d7.w),a3			; a3 = S.. se top
-		movea.l	a3,a1					; a1 = S.. se top
-;--------< voice table top get >--------;
-		move.w	(a1)+,d0				; rel. voice address (word)
-		add.l	a3,d0					; abs. voice address (long word)
-		move.l	d0,se_voice_addr(a6)	; voice address store
-;-------< base,use channel total >------;
-		move.b	(a1)+,d5				; d5 = base
-		move.b	(a1)+,d7				; d7 = use channel total
-		subq.b	#1,d7					; counter
-
-		moveq	#flgvol,d6				; d6 = flgvol
-;=======================================;
-;		 s.e headder set to ram			;
-;=======================================;
-.loop:
-;------< dischannel address get >-------;
-		moveq	#0,d3					; d3 clear
-		move.b	hd_sech_no(a1),d3		; d3 = channel no 
-		move.b	d3,d4					; d4 = channel
-		bmi.s	.psg
-.fm:
-		subq.w	#2,d3					
-		lsl.w	#2,d3					; $02->$00 $03->$04 $04->$08 $05->$0C
-		lea		se_song_tb(pc),a5		; song channel off ram
-		movea.l	(a5,d3.w),a5			; song channel off ram
-		bset.b	#_wr,(a5)				; write protect on
-		bra.s	.header
-.psg:
-		lsr.w	#3,d3					; $80->$10 $A0->$14 $C0->$18
-		movea.l	se_song_tb(pc,d3.w),a5	; song channel off ram
-		bset.b	#_wr,(a5)				; write protect on
-		cmpi.b	#$c0,d4					; if channel · $c0
-		bne.s	.header					; then jump
-		move.b	d4,d0					; channel data
-		ori.b	#$1f,d0					; PSG off data
-		move.b	d0,psg68k				; PSG off write
-		bchg	#5,d0					; $c0->$e0 $e0->$c0
-		move.b	d0,psg68k				; PSG off write
-.header:
-;-------< header ram address get >------;
-		move.l	se_ram_tb(pc,d3.w),a5	; a5 = header send ram addr.
-		movea.l	a5,a2
-;-------< s.e channel ram clear >-------;
-		moveq	#flgvol/4-1,d0
-.loop1:
-		clr.l	(a2)+					; ram clear
-		dbra	d0,.loop1
-
-;--------< header ram data set >--------;
-		move.w	(a1)+,(a5)				; flag,channel set
-		move.b	d5,cbase(a5)			; base set
-		moveq	#0,d0					; d0 clear
-		move.w	(a1)+,d0				; rel. table pointer
-		add.l	a3,d0					; abs. table pointer
-		move.l	d0,tbpon(a5)			; table pointer set
-		move.w	(a1)+,bias(a5)			; bias, volm set
-		move.b	#1,lcont(a5)			; length counter set
-		move.b	d6,stac(a5)				; stac (flgvol) set
-		tst.b	d4						; if channel = PSG
-		bmi.s	.pass1					; then pass
-		move.b	#$c0,panstr(a5)			; FM pan store
-.pass1:
-		dbra	d7,.loop
-
-		tst.b	fm_se2_wk(a6)			; if FM s.e2 enable off
-		bpl.s	.jump1					; then jump
-		bset.b	#_wr,back_se_wk(a6)		; back s.e write protect on
-.jump1:
-		tst.b	psg_se3_wk(a6)			; if PSG s.e3 enable
-		bpl.s	.jump2					; then jump
-		bset.b	#_wr,back_se2_wk(a6)	; back s.e2 write protect on
-.jump2:
-		rts
-
 ;		public	se_song_tb
 se_song_tb:
 		dc.l	fm2_wk+sound_ram		; FM 2ch
@@ -1054,83 +968,6 @@ se_ram_tb:
 		dc.l	psg_se2_wk+sound_ram	; PSG A0ch
 		dc.l	psg_se3_wk+sound_ram	; PSG C0ch
 		dc.l	psg_se3_wk+sound_ram	; PSG E0ch (for CMEND)
-
-
-;=======================================;
-;										;
-;			  BACK SE SCAN				;
-;										;
-;=======================================;
-; in d7 = key no.
-;		public	backscan
-backscan:
-		lea	backtb(pc),a3 ; a3 = backtb address
-		subi.b	#bkstrt,d7
-		lsl.w	#2,d7					; long word table
-		adda.l	(a3,d7.w),a3			; a3 = back se header address
-		movea.l	a3,a1					; a1 = back se header address
-;--------< voice table top get >--------;
-		move.w	(a1)+,d0				; rel. voice address (word)
-		add.l	a3,d0					; abs. voice address (long word)
-		move.l	d0,back_voice_addr(a6)	; back se voice address store
-;-------< base,use channel total >------;
-		move.b	(a1)+,d5				; d5 = base
-		move.b	(a1)+,d7				; d7 = use channel total
-		subq.b	#1,d7					; counter
-
-		moveq	#flgvol,d6				; d6 = flgvol
-;=======================================;
-;	   back s.e headder set to ram		;
-;=======================================;
-.loop:
-		move.b	hd_sech_no(a1),d4		; d4 = channel
-		bmi.s	.psg
-
-		bset.b	#_wr,fm4_wk(a6)			; song write protect on
-		lea		back_se_wk(a6),a5		; back se1
-		bra.s	.header
-.psg:
-		bset.b	#_wr,psg2_wk(a6)		; song write protect on
-		lea		back_se2_wk(a6),a5		; back se2
-
-;-------< header ram address get >------;
-.header:
-		movea.l	a5,a2
-;----< bsck s.e channel ram clear >-----;
-		moveq	#flgvol/4-1,d0
-.loop1:
-		clr.l	(a2)+					; ram clear
-		dbra	d0,.loop1
-
-;--------< header ram data set >--------;
-		move.w	(a1)+,(a5)				; flag,channel set
-		move.b	d5,cbase(a5)			; base set
-		moveq	#0,d0					; d0 clear
-		move.w	(a1)+,d0				; rel. table pointer
-		add.l	a3,d0					; abs. table pointer
-		move.l	d0,tbpon(a5)			; table pointer set
-		move.w	(a1)+,bias(a5)			; bias, volm set
-		move.b	#1,lcont(a5)			; length counter set
-		move.b	d6,stac(a5)				; stac (flgvol) set
-		tst.b	d4						; if channel = PSG
-		bmi.s	.pass1					; then pass
-		move.b	#$c0,panstr(a5)			; FM pan store
-.pass1:
-		dbra	d7,.loop
-
-		tst.b	fm_se2_wk(a6)			; if FM s.e2 enable off
-		bpl.s	.jump1					; then jump
-		bset.b	#_wr,back_se_wk(a6)		; back se write protect on
-.jump1:
-		tst.b	psg_se3_wk(a6)			; if PSG s.e3 enable off
-		bpl.s	.jump2
-		bset.b	#_wr,back_se2_wk(a6)	; back se2 write protect on
-		ori.b	#$1f,d4					; PSG off data
-		move.b	d4,psg68k				; PSG off write
-		bchg	#5,d4					; $c0->$e0 $e0->$c0
-		move.b	d4,psg68k				; PSG off write
-.jump2:
-		rts
 
 bse_song_tb:
 		dc.l	fm4_wk+sound_ram		; FM 4ch
